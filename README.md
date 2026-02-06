@@ -21,3 +21,7 @@ Clone the repository and enter the directory:
 ```bash
 git clone [https://github.com/banana-pixel/QuakeAlert-Server.git](https://github.com/banana-pixel/QuakeAlert-Server.git)
 cd QuakeAlert-Server
+
+# Copy the example env file and fill in your details
+cp .env.example .env
+nano .env
