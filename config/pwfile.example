@@ -1,0 +1,4 @@
+# This is a placeholder.
+# To generate a real password, run:
+# docker run --rm -it eclipse-mosquitto mosquitto_passwd -c /mosquitto/config/pwfile YOUR_USER
+user:$7$101$dummy_salt$dummy_hash...

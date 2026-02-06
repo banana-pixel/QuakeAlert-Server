@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto
+    container_name: quake-broker
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - ./config/pwfile:/mosquitto/config/pwfile
+      - mosquitto_data:/mosquitto/data
+
+  ntfy:
+    image: binwiederhier/ntfy
+    container_name: quake-ntfy
+    restart: unless-stopped
+    command: serve
+    environment:
+      - NTFY_BASE_URL=https://quakealert.bananapixel.my.id
+      - NTFY_LISTEN_HTTP=:80
+      - NTFY_BEHIND_PROXY=true
+    volumes:
+      - ntfy_cache:/var/cache/ntfy
+      - ntfy_lib:/var/lib/ntfy
+    ports:
+      - "127.0.0.1:8080:80"
+
+  # --- LAYANAN BARU: WEB SERVER UNTUK LAPORAN ---
+  report-server:
+    build: .
+    container_name: quake-report
+    restart: unless-stopped
+    command: python server.py
+    volumes:
+      - sqlite_data:/app/data  # Menyimpan database agar tidak hilang
+    ports:
+      - "127.0.0.1:5000:5000"  # Expose ke host agar Nginx bisa akses
+
+  bridge:
+    build: .
+    container_name: quake-bridge
+    restart: unless-stopped
+    depends_on:
+      - mosquitto
+      - ntfy
+      - report-server
+    env_file:
+      - .env
+    environment:
+      - MQTT_BROKER=mosquitto
+      # Override endpoint laporan agar mengarah ke container report-server (internal docker)
+      - REPORT_ENDPOINT=http://report-server:5000/laporan
+
+volumes:
+  mosquitto_data:
+  ntfy_cache:
+  ntfy_lib:
+  sqlite_data:

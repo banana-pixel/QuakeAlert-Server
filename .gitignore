@@ -1,0 +1,6 @@
+.env
+nginx_backup.conf
+nginx_quakealert.conf
+config/pwfile
+__pycache__/
+*.pyc

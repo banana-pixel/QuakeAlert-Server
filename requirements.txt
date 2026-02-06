@@ -1,0 +1,6 @@
+paho-mqtt
+requests
+python-telegram-bot
+asyncio
+flask
+flask-cors
