@@ -132,21 +132,21 @@ def on_message(client, userdata, msg):
             )
 
             # Ntfy Warning (High Priority)
-           try:
-               geo_tag = f"geo:{event_lat};{event_lon}"
+            try:
+                geo_tag = f"geo:{event_lat};{event_lon}"
 
-               requests.post(
-                   f"{NTFY_SERVER}/{NTFY_TOPIC}",
-                   auth=(NTFY_USER, NTFY_PASS),
-                   headers={
-                       "Title": title.encode('utf-8'), 
-                       "Priority": "5",
-                       "Tags": f"warning,earthquake,{geo_tag}" 
-                   },
-                   data=message_body.encode('utf-8'),
-                   verify=False,
-                   timeout=5
-               )
+                requests.post(
+                    f"{NTFY_SERVER}/{NTFY_TOPIC}",
+                    auth=(NTFY_USER, NTFY_PASS),
+                    headers={
+                        "Title": title.encode('utf-8'),
+                        "Priority": "5",
+                        "Tags": f"warning,earthquake,{geo_tag}"
+                    },
+                    data=message_body.encode('utf-8'),
+                    verify=False,
+                    timeout=5
+                )
             except Exception as e:
                 print(f"Error sending Alert to NTFY: {e}")
 
