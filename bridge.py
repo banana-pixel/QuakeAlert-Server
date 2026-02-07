@@ -107,8 +107,9 @@ def on_message(client, userdata, msg):
             waktu = payload.get("waktu", "N/A")
             intensitas = payload.get("intensitas", "N/A") # e.g. "VI (Kuat)"
 
-            # Parse "VI (Kuat)" -> "VI" and "Kuat"
-            # Format: ⚠️ PERINGATAN GEMPA KUAT (INTENSITY VI)
+            event_lat = str(payload.get("lat", "0"))
+            event_lon = str(payload.get("lon", "0"))
+
             intensity_short = intensitas.split(' ')[0] # "VI"
             intensity_desc = intensitas
             if '(' in intensitas:
@@ -138,7 +139,9 @@ def on_message(client, userdata, msg):
                     headers={
                         "Title": title.encode('utf-8'), 
                         "Priority": "5", 
-                        "Tags": "warning,earthquake"
+                        "Tags": "warning,earthquake",
+                        "X-Event-Lat": event_lat,
+                        "X-Event-Lon": event_lon
                     },
                     data=message_body.encode('utf-8'),
                     verify=False,
