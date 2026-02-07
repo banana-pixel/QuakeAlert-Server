@@ -21,9 +21,11 @@ services:
       - NTFY_BASE_URL=https://quakealert.bananapixel.my.id
       - NTFY_LISTEN_HTTP=:80
       - NTFY_BEHIND_PROXY=true
+      - NTFY_FIREBASE_KEY_FILE=/etc/ntfy/firebase-key.json
     volumes:
       - ntfy_cache:/var/cache/ntfy
       - ntfy_lib:/var/lib/ntfy
+      - ./config/firebase-key.json:/etc/ntfy/firebase-key.json:ro
     ports:
       - "8080:80"
 

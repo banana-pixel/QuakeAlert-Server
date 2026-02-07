@@ -4,3 +4,4 @@ nginx_quakealert.conf
 config/pwfile
 __pycache__/
 *.pyc
+config/firebase-key.json
