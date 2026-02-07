@@ -4,3 +4,4 @@ python-telegram-bot
 asyncio
 flask
 flask-cors
+python-dotenv

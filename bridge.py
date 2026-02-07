@@ -7,8 +7,9 @@ import threading
 import os
 import sys
 import urllib3
+from datetime import datetime
 
-# Suppress InsecureRequestWarning if using self-signed certs/local http
+# Suppress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
@@ -26,8 +27,10 @@ REPORT_ENDPOINT = os.getenv("REPORT_ENDPOINT", "http://localhost:5000/laporan")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-# --- ASYNCIO SETUP ---
-# Create a dedicated loop for Asyncio (Telegram)
+# Memory to track online sensors for get_status command
+sensors_inventory = {}
+
+# --- ASYNCIO SETUP FOR TELEGRAM ---
 asyncio_loop = asyncio.new_event_loop()
 
 def start_asyncio_loop(loop):
@@ -40,34 +43,50 @@ if not TELEGRAM_BOT_TOKEN:
 
 bot = telegram.Bot(token=TELEGRAM_BOT_TOKEN)
 
-def on_connect(client, userdata, flags, rc):
+# --- MQTT CALLBACKS (UPDATED TO V2) ---
+def on_connect(client, userdata, flags, rc, properties):
     if rc == 0:
         print(f"===> Connected to MQTT Broker ({MQTT_BROKER})!")
-        client.subscribe([("seismo/alert", 0), ("seismo/report", 0), ("seismo/status", 0)])
+        # Subscribe to ALL topics
+        client.subscribe([
+            ("seismo/alert", 0), 
+            ("seismo/report", 0), 
+            ("seismo/status", 0),
+            ("seismo/command", 0),
+            ("seismo/heartbeat", 0)
+        ])
     else:
         print(f"===> Failed to connect to Broker, return code: {rc}")
 
 def on_message(client, userdata, msg):
-    station_id = "Unknown" # Initialize here to prevent UnboundLocalError
+    global sensors_inventory
+    station_id = "Unknown"
+    payload_string = msg.payload.decode('utf-8')
+
+    # Ignore raw string commands like 'ping'
+    if msg.topic == "seismo/command" and payload_string == "ping":
+        return
+
     try:
-        print(f"Msg received on: {msg.topic}")
-        payload_string = msg.payload.decode('utf-8')
         payload = json.loads(payload_string)
+        station_id = payload.get('stationId', payload.get('id', 'Unknown'))
 
-        station_id = payload.get('stationId', 'Unknown')
-
-        # 1. STATION HEALTH
-        if msg.topic == "seismo/status":
-            try:
-                requests.post(
-                    f"{NTFY_SERVER}/seismo_status",
-                    auth=(NTFY_USER, NTFY_PASS),
-                    data=payload_string.encode('utf-8'),
-                    verify=False,
-                    timeout=5
-                )
-            except Exception as e:
-                print(f"Error posting status to NTFY: {e}")
+        # 1. STATION HEALTH & HEARTBEAT
+        if msg.topic == "seismo/status" or msg.topic == "seismo/heartbeat":
+            payload["last_seen"] = datetime.now().strftime("%H:%M:%S")
+            sensors_inventory[station_id] = payload
+            
+            # Forward status if needed
+            if msg.topic == "seismo/status":
+                try:
+                    requests.post(
+                        f"{NTFY_SERVER}/seismo_status",
+                        auth=(NTFY_USER, NTFY_PASS),
+                        data=payload_string.encode('utf-8'),
+                        verify=False,
+                        timeout=5
+                    )
+                except: pass
 
             if payload.get("event") == "startup":
                 lokasi = payload.get('lokasi', 'N/A')
@@ -77,27 +96,50 @@ def on_message(client, userdata, msg):
                     f"Lokasi: {lokasi}\n"
                     f"Versi Firmware: {version}"
                 )
-                # Thread-safe async call
                 asyncio.run_coroutine_threadsafe(
                     bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message_text, parse_mode='Markdown'),
                     asyncio_loop
                 )
 
-        # 2. EARTHQUAKE ALERTS
+        # 2. EARTHQUAKE ALERTS (IMMEDIATE WARNING)
         elif msg.topic == "seismo/alert":
             lokasi = payload.get("lokasi", "N/A")
             waktu = payload.get("waktu", "N/A")
-            intensitas = payload.get("intensitas", "N/A")
+            intensitas = payload.get("intensitas", "N/A") # e.g. "VI (Kuat)"
 
-            title = f"🚨 PERINGATAN ({intensitas}) - {station_id}"
-            message_body = f"Station: {station_id}\nLokasi: {lokasi}\nWaktu: {waktu}\nIntensitas: {intensitas}"
+            # Parse "VI (Kuat)" -> "VI" and "Kuat"
+            # Format: ⚠️ PERINGATAN GEMPA KUAT (INTENSITY VI)
+            intensity_short = intensitas.split(' ')[0] # "VI"
+            intensity_desc = intensitas
+            if '(' in intensitas:
+                # Extract text inside parenthesis e.g. "Kuat"
+                try:
+                    intensity_desc = intensitas.split('(')[1].replace(')', '') 
+                except:
+                    intensity_desc = intensitas
 
-            # Ntfy
+            title = f"⚠️ PERINGATAN GEMPA {intensity_desc.upper()} (INTENSITY {intensity_short})"
+            
+            # Body Format:
+            # Station : SEIS-01
+            # Lokasi : ...
+            message_body = (
+                f"Station : {station_id}\n"
+                f"Lokasi : {lokasi}\n"
+                f"Waktu: {waktu}\n"
+                f"Intensitas : {intensitas}"
+            )
+
+            # Ntfy Warning (High Priority)
             try:
                 requests.post(
                     f"{NTFY_SERVER}/{NTFY_TOPIC}",
                     auth=(NTFY_USER, NTFY_PASS),
-                    headers={"Title": title.encode('utf-8'), "Priority": "max", "Tags": "warning,earthquake"},
+                    headers={
+                        "Title": title.encode('utf-8'), 
+                        "Priority": "5", 
+                        "Tags": "warning,earthquake"
+                    },
                     data=message_body.encode('utf-8'),
                     verify=False,
                     timeout=5
@@ -106,19 +148,35 @@ def on_message(client, userdata, msg):
                 print(f"Error sending Alert to NTFY: {e}")
 
             # Telegram
-            tele_msg = f"🚨 *PERINGATAN GEMPA*\n\n{message_body}"
+            tele_msg = f"*{title}*\n\n{message_body}"
             asyncio.run_coroutine_threadsafe(
                 bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=tele_msg, parse_mode='Markdown'),
                 asyncio_loop
             )
+            
+            # Also save alert event to DB
+            try:
+                requests.post(REPORT_ENDPOINT, json=payload, timeout=5)
+            except: pass
 
-        # 3. DATA REPORTS
+        # 3. FINAL REPORTS (DB ONLY)
         elif msg.topic == "seismo/report":
+            # Save to Database
             try:
                 response = requests.post(REPORT_ENDPOINT, json=payload, timeout=10)
                 print(f"Report from {station_id} saved to DB. Code: {response.status_code}")
             except Exception as e:
                 print(f"Failed to save report to DB: {e}")
+
+        # 4. COMMAND HANDLER
+        elif msg.topic == "seismo/command":
+            if payload.get("cmd") == "get_status":
+                report = {
+                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "total_sensors": len(sensors_inventory),
+                    "sensors": list(sensors_inventory.values())
+                }
+                client.publish("seismo/status_report", json.dumps(report))
 
     except json.JSONDecodeError:
         print(f"!!! Error: Could not decode JSON from {msg.topic}")
@@ -126,20 +184,18 @@ def on_message(client, userdata, msg):
         print(f"!!! CRITICAL ERROR processing message from {station_id}: {e}")
 
 # --- STARTUP ---
-# Start the asyncio loop in a separate thread for Telegram
 asyncio_thread = threading.Thread(target=start_asyncio_loop, args=(asyncio_loop,), daemon=True)
 asyncio_thread.start()
 
-client = mqtt.Client()
+# Initialize with Callback API V2
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 client.on_connect = on_connect
 client.on_message = on_message
+
 if MQTT_USER and MQTT_PASSWORD:
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
 
-print(">> Bridge Script Running...")
-print(f">> Connecting to {MQTT_BROKER}:{MQTT_PORT}...")
-
-# Blocking loop for MQTT (runs on main thread)
+print(">> Bridge Script Running (V2 Ready)...")
 try:
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
     client.loop_forever()
