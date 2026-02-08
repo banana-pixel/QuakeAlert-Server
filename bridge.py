@@ -167,10 +167,10 @@ def on_message(client, userdata, msg):
                 asyncio_loop
             )
             
-            # Also save alert event to DB
             try:
                 requests.post(REPORT_ENDPOINT, json=payload, timeout=5)
-            except: pass
+            except Exception as e:
+                print(f"Failed to save alert to DB: {e}")
 
         # 3. FINAL REPORTS (DB ONLY)
         elif msg.topic == "seismo/report":

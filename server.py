@@ -22,6 +22,7 @@ if not os.path.exists(DATA_DIR):
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    # Updated table schema to include latitude and longitude
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS laporan (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +32,9 @@ def init_db():
             durasi REAL NOT NULL,
             pga_maks TEXT NOT NULL,
             intensitas_maks TEXT NOT NULL,
-            deskripsi TEXT NOT NULL
+            deskripsi TEXT NOT NULL,
+            latitude REAL,
+            longitude REAL
         )
     ''')
     cursor.execute('''
@@ -56,16 +59,21 @@ def health_check():
 def tambah_laporan():
     data = request.json
     try:
-        # Validate required keys exists to prevent internal server error
+        # Added 'lat' and 'lon' to the validation and extraction logic
         required_keys = ['stationId', 'lokasi', 'waktu', 'durasi', 'pga', 'intensitas', 'deskripsi']
         if not all(key in data for key in required_keys):
             return jsonify({"status": "gagal", "error": "Missing JSON keys"}), 400
 
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
+        # Insert latitude and longitude (defaulting to None/NULL if not provided)
         cursor.execute(
-            "INSERT INTO laporan (station_id, lokasi, waktu_kejadian, durasi, pga_maks, intensitas_maks, deskripsi) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (data['stationId'], data['lokasi'], data['waktu'], data['durasi'], data['pga'], data['intensitas'], data['deskripsi'])
+            """INSERT INTO laporan (station_id, lokasi, waktu_kejadian, durasi, pga_maks, 
+               intensitas_maks, deskripsi, latitude, longitude) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (data['stationId'], data['lokasi'], data['waktu'], data['durasi'], 
+             data['pga'], data['intensitas'], data['deskripsi'], 
+             data.get('lat'), data.get('lon'))
         )
         conn.commit()
         conn.close()
