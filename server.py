@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from datetime import datetime, timedelta
 from flask_cors import CORS
 import sqlite3
 import json
@@ -31,6 +32,14 @@ def init_db():
             pga_maks TEXT NOT NULL,
             intensitas_maks TEXT NOT NULL,
             deskripsi TEXT NOT NULL
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS stations (
+            station_id TEXT PRIMARY KEY,
+            last_ping TEXT NOT NULL,
+            latency TEXT,
+            status TEXT
         )
     ''')
     conn.commit()
@@ -77,6 +86,69 @@ def dapatkan_laporan():
 
         laporan_list = [dict(row) for row in laporan_rows]
         return jsonify(laporan_list)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --- KEEP ALIVE ROUTES ---
+
+@app.route('/heartbeat', methods=['POST'])
+def receive_heartbeat():
+    data = request.json
+    station_id = data.get('stationId') # Note: matching the JSON key from firmware
+    latency = data.get('latency', 'N/A')
+    
+    if not station_id:
+        return jsonify({"error": "Missing stationId"}), 400
+
+    # Use server time for consistency
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        # Upsert: Insert or Update if exists
+        cursor.execute('''
+            INSERT INTO stations (station_id, last_ping, latency, status)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(station_id) DO UPDATE SET
+            last_ping=excluded.last_ping,
+            latency=excluded.latency,
+            status='online'
+        ''', (station_id, current_time, latency, 'online'))
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "updated"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/stations', methods=['GET'])
+def get_stations_status():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM stations")
+        rows = cursor.fetchall()
+        conn.close()
+
+        results = []
+        now = datetime.now()
+        
+        for row in rows:
+            data = dict(row)
+            # Calculate offline status logic
+            try:
+                last_ping = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S")
+                diff = now - last_ping
+                # 3 minutes = 180 seconds
+                if diff.total_seconds() > 180:
+                    data['status'] = 'offline'
+            except:
+                data['status'] = 'unknown'
+            results.append(data)
+
+        return jsonify(results)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

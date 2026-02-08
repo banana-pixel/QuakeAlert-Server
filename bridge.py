@@ -75,6 +75,16 @@ def on_message(client, userdata, msg):
         if msg.topic == "seismo/status" or msg.topic == "seismo/heartbeat":
             payload["last_seen"] = datetime.now().strftime("%H:%M:%S")
             sensors_inventory[station_id] = payload
+            try:
+                # Construct URL (assumes report server is on port 5000)
+                # If REPORT_ENDPOINT is "http://localhost:5000/laporan", we want "http://localhost:5000/heartbeat"
+                base_url = REPORT_ENDPOINT.rsplit('/', 1)[0]
+                heartbeat_url = f"{base_url}/heartbeat"
+                
+                # Forward the payload directly
+                requests.post(heartbeat_url, json=payload, timeout=2)
+            except Exception as e:
+                print(f"Failed to forward heartbeat: {e}")
             
             # Forward status if needed
             if msg.topic == "seismo/status":
