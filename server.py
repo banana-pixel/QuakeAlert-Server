@@ -42,7 +42,8 @@ def init_db():
             station_id TEXT PRIMARY KEY,
             last_ping TEXT NOT NULL,
             latency TEXT,
-            status TEXT
+            status TEXT,
+            location TEXT
         )
     ''')
     conn.commit()
@@ -105,25 +106,27 @@ def receive_heartbeat():
     data = request.json
     station_id = data.get('stationId') # Note: matching the JSON key from firmware
     latency = data.get('latency', 'N/A')
+    location = data.get('lokasi', 'Unknown')
     
     if not station_id:
         return jsonify({"error": "Missing stationId"}), 400
 
     # Use server time for consistency
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
         # Upsert: Insert or Update if exists
         cursor.execute('''
-            INSERT INTO stations (station_id, last_ping, latency, status)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO stations (station_id, last_ping, latency, location, status)
+            VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(station_id) DO UPDATE SET
             last_ping=excluded.last_ping,
             latency=excluded.latency,
+            location=excluded.location,
             status='online'
-        ''', (station_id, current_time, latency, 'online'))
+        ''', (station_id, current_time, latency, location, 'online'))
         conn.commit()
         conn.close()
         return jsonify({"status": "updated"}), 200
