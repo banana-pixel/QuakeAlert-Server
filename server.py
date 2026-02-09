@@ -1,10 +1,8 @@
 from flask import Flask, request, jsonify
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from flask_cors import CORS
 import sqlite3
-import json
 import os
-import sys
 
 app = Flask(__name__)
 CORS(app)
@@ -30,8 +28,8 @@ def init_db():
             lokasi TEXT NOT NULL,
             waktu_kejadian TEXT NOT NULL,
             durasi REAL NOT NULL,
-            pga_maks TEXT NOT NULL,
-            intensitas_maks TEXT NOT NULL,
+            pga_maks REAL NOT NULL,
+            intensitas_maks INTEGER NOT NULL,
             deskripsi TEXT NOT NULL,
             latitude REAL,
             longitude REAL
@@ -41,7 +39,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS stations (
             station_id TEXT PRIMARY KEY,
             last_ping TEXT NOT NULL,
-            latency TEXT,
+            latency INTEGER,
+            RSSI INTEGER,
             status TEXT,
             location TEXT
         )
@@ -58,7 +57,10 @@ def health_check():
 
 @app.route('/laporan', methods=['POST'])
 def tambah_laporan():
-    data = request.json
+    if not request.is_json:
+        return jsonify({"error": "Invalid JSON"}), 400
+    data = request.get_json()
+
     try:
         # Added 'lat' and 'lon' to the validation and extraction logic
         required_keys = ['stationId', 'lokasi', 'waktu', 'durasi', 'pga', 'intensitas', 'deskripsi']
@@ -103,9 +105,15 @@ def dapatkan_laporan():
 
 @app.route('/heartbeat', methods=['POST'])
 def receive_heartbeat():
-    data = request.json
+    if not request.is_json:
+        return jsonify({"error": "Invalid JSON"}), 400
+    data = request.get_json()
     station_id = data.get('stationId') # Note: matching the JSON key from firmware
-    latency = data.get('latency', 'N/A')
+
+    latency = data.get('latency')
+
+    rssi = data.get('rssi')
+    
     location = data.get('lokasi', 'Unknown')
     
     if not station_id:
@@ -119,14 +127,15 @@ def receive_heartbeat():
         cursor = conn.cursor()
         # Upsert: Insert or Update if exists
         cursor.execute('''
-            INSERT INTO stations (station_id, last_ping, latency, location, status)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO stations (station_id, last_ping, latency, RSSI, location, status)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(station_id) DO UPDATE SET
             last_ping=excluded.last_ping,
             latency=excluded.latency,
+            RSSI=excluded.RSSI,
             location=excluded.location,
             status='online'
-        ''', (station_id, current_time, latency, location, 'online'))
+        ''', (station_id, current_time, latency, rssi, location, 'online'))
         conn.commit()
         conn.close()
         return jsonify({"status": "updated"}), 200
@@ -144,7 +153,7 @@ def get_stations_status():
         conn.close()
 
         results = []
-        now = datetime.now()
+        now = datetime.utcnow()
         
         for row in rows:
             data = dict(row)
