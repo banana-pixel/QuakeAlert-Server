@@ -55,6 +55,12 @@ services:
       # Override endpoint laporan agar mengarah ke container report-server (internal docker)
       - REPORT_ENDPOINT=http://report-server:5000/laporan
 
+  chat-service:
+    build: ./chat-server
+    ports:
+      - "3000:3000"
+    restart: always
+
 volumes:
   mosquitto_data:
   ntfy_cache:
