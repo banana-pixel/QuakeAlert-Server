@@ -7,6 +7,7 @@ import threading
 import os
 import sys
 import urllib3
+import time
 from datetime import datetime
 
 # Suppress InsecureRequestWarning
@@ -73,7 +74,7 @@ def on_message(client, userdata, msg):
 
         # 1. STATION HEALTH & HEARTBEAT
         if msg.topic == "seismo/status" or msg.topic == "seismo/heartbeat":
-            payload["last_seen"] = datetime.now().strftime("%H:%M:%S")
+            payload["last_seen"] = int(time.time())
             sensors_inventory[station_id] = payload
             try:
                 # Construct URL (assumes report server is on port 5000)
@@ -185,7 +186,7 @@ def on_message(client, userdata, msg):
         elif msg.topic == "seismo/command":
             if payload.get("cmd") == "get_status":
                 report = {
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "timestamp": int(time.time()),
                     "total_sensors": len(sensors_inventory),
                     "sensors": list(sensors_inventory.values())
                 }

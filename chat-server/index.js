@@ -18,16 +18,26 @@ const MAX_HISTORY = 50;
 
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
+    
     setTimeout(() => {
         console.log("Sending history to:", socket.id);
         socket.emit("chat_history", chatHistory);
     }, 1000);
 
     socket.on("send_message", (data) => {
-        console.log("New Message Received:", data.text);
-        chatHistory.push(data);
+        // FIX: Inject the server's current time as a Unix timestamp (seconds)
+        const messageWithTime = {
+            senderId: data.senderId,
+            message: data.message, // Ensure this matches the key sent by the app
+            timestamp: Math.floor(Date.now() / 1000)
+        };
+
+        console.log("New Message Received:", messageWithTime.message);
+        
+        chatHistory.push(messageWithTime);
         if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
-        io.emit("receive_message", data);
+        
+        io.emit("receive_message", messageWithTime);
     });
 
     socket.on("disconnect", () => {

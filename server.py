@@ -157,15 +157,23 @@ def get_stations_status():
         
         for row in rows:
             data = dict(row)
-            # Calculate offline status logic
             try:
-                last_ping = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S")
-                diff = now - last_ping
-                # 3 minutes = 180 seconds
+                # 1. Parse the text string from DB back to a datetime object
+                last_ping_dt = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S")
+                
+                # 2. FIX: Convert it to a Unix Timestamp (Integer) for the App
+                # We assume the time stored is UTC
+                data['last_ping'] = int(last_ping_dt.replace(tzinfo=timezone.utc).timestamp())
+
+                # 3. Calculate offline status (existing logic)
+                diff = now - last_ping_dt
                 if diff.total_seconds() > 180:
                     data['status'] = 'offline'
-            except:
+            except Exception as e:
+                print(f"Error parsing date: {e}")
                 data['status'] = 'unknown'
+                data['last_ping'] = 0 # Fallback so app doesn't crash
+
             results.append(data)
 
         return jsonify(results)
