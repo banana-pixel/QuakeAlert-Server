@@ -31,15 +31,50 @@ docker cp quake-report:/app/data/laporan_gempa.db backup/laporan_gempa_$(date +%
 
 Copy `backup/laporan_gempa_YYYYMMDD.db` to a safe place (another server, cloud storage, or local machine).
 
-**Optional: schedule daily backups (cron):**
+**Optional: schedule weekly backups (cron):**
 
 ```bash
 crontab -e
-# Add a line (runs daily at 2 AM):
-0 2 * * * mkdir -p /root/QuakeAlert-Server/backup && docker cp quake-report:/app/data/laporan_gempa.db /root/QuakeAlert-Server/backup/laporan_gempa_$(date +\%Y\%m\%d).db
+# Add this single line (runs every Sunday at 3 AM). Use your actual repo path.
+0 3 * * 0 mkdir -p /root/QuakeAlert-Server/backup && docker cp quake-report:/app/data/laporan_gempa.db /root/QuakeAlert-Server/backup/laporan_gempa_$(date +\%Y\%m\%d).db
 ```
 
-Then periodically copy the `backup/` folder off the server (e.g. with `scp` or rsync).
+Then copy the backup off the server to your laptop or cloud (see section 1c).
+
+### 1c. Copy backup to your laptop
+
+Backups on the server are lost if the server or disk fails. Copy them to your laptop (or another safe place) regularly.
+
+**From your laptop** (Linux, macOS, or Windows with OpenSSH/WSL), open a terminal and run:
+
+```bash
+# Create a folder on your laptop
+mkdir -p ~/quakealert-backups
+
+# Copy all backup files from the server (replace YOUR_SERVER_IP with the server’s IP or hostname)
+scp root@YOUR_SERVER_IP:/root/QuakeAlert-Server/backup/*.db ~/quakealert-backups/
+```
+
+Example: if your server IP is `47.123.45.67`:
+
+```bash
+scp root@47.123.45.67:/root/QuakeAlert-Server/backup/*.db ~/quakealert-backups/
+```
+
+You will be asked for the server’s `root` password. The `.db` files will appear in `~/quakealert-backups/` on your laptop.
+
+**Copy the whole backup folder:**
+
+```bash
+scp -r root@YOUR_SERVER_IP:/root/QuakeAlert-Server/backup ~/quakealert-backups
+```
+
+**Using a GUI (no terminal):**
+
+- **FileZilla** (Windows/macOS/Linux): Protocol **SFTP**, host = server IP, user `root`, password = server password. Browse to `/root/QuakeAlert-Server/backup/`, select the `.db` files, and drag them to a folder on your laptop.
+- **WinSCP** (Windows): Same idea — connect via SFTP, go to `/root/QuakeAlert-Server/backup/`, download the files.
+
+Do this whenever you want a safe copy (e.g. once a month after the weekly cron has run).
 
 ---
 
