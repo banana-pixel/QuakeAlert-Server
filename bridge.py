@@ -86,7 +86,9 @@ def on_message(client, userdata, msg):
                 heartbeat_url = f"{base_url}/heartbeat"
                 
                 # Forward the payload directly (with API key if set)
-                requests.post(heartbeat_url, json=payload, headers=REPORT_HEADERS, timeout=2)
+                r = requests.post(heartbeat_url, json=payload, headers=REPORT_HEADERS, timeout=2)
+                if r.status_code != 200:
+                    print(f"Failed to forward heartbeat: HTTP {r.status_code} — check REPORT_API_KEY if 401")
             except Exception as e:
                 print(f"Failed to forward heartbeat: {e}")
             

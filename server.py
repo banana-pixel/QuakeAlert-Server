@@ -181,17 +181,17 @@ def get_stations_status():
         conn.close()
 
         results = []
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Offline threshold: mark station offline if no heartbeat in this many seconds
         OFFLINE_THRESHOLD_SEC = 120
 
         for row in rows:
             data = dict(row)
             try:
-                # 1. Parse the text string from DB back to a datetime object
-                last_ping_dt = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S")
+                # 1. Parse the text string from DB (stored as UTC) back to a datetime object
+                last_ping_dt = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
                 # 2. Convert to Unix timestamp (integer) for the app
-                data['last_ping'] = int(last_ping_dt.replace(tzinfo=timezone.utc).timestamp())
+                data['last_ping'] = int(last_ping_dt.timestamp())
                 # 3. Mark offline if last heartbeat too old
                 diff = now - last_ping_dt
                 if diff.total_seconds() > OFFLINE_THRESHOLD_SEC:
