@@ -5,7 +5,8 @@ import sqlite3
 import os
 
 app = Flask(__name__)
-CORS(app)
+# Restrict CORS to our domain only (Android app is not browser-bound; CORS applies to web clients)
+CORS(app, origins=["https://quakealert.bananapixel.my.id"])
 
 # --- SETUP PATHS ---
 # Ensure data folder is relative to the script location
