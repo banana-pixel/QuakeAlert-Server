@@ -197,6 +197,32 @@ Do **not** commit `.env`, `config/pwfile`, or `config/firebase-key.json`; they c
 
 ---
 
+## Clean test data (dummy "x" rows)
+
+If you inserted test rows (e.g. with `station_id` or `lokasi` = `x`) and want to remove them:
+
+```bash
+# On the server (use your real REPORT_API_KEY from .env)
+curl -X POST http://127.0.0.1:5000/admin/cleanup-test \
+  -H "X-API-Key: YOUR_REPORT_API_KEY"
+```
+
+Response: `{"status":"ok","deleted":N}`. This only deletes rows where `station_id = 'x'` or `lokasi = 'x'`.
+
+---
+
+## Sensor shows "offline" in the app
+
+Stations are marked **offline** when the server has not received a heartbeat for **3 minutes** (180 seconds).
+
+1. **ESP32** sends a heartbeat every **60 seconds** on `seismo/heartbeat` (when MQTT is connected). Payload: `stationId`, `lokasi`, `rssi`, `latency`, `status`.
+2. **Bridge** forwards each heartbeat to `POST /heartbeat` (with API key). If the bridge gets 401, heartbeats are not stored — check that the bridge has the same `REPORT_API_KEY` as the server.
+3. **Check:** `docker logs quake-bridge` — you should see no "Failed to forward heartbeat" errors. If the ESP32 is powered and on WiFi, heartbeats should appear every ~60s and the app should show the sensor **online** after the next refresh.
+
+If the sensor stays offline: ensure the ESP32 is connected to WiFi and MQTT (see [QuakeAlert-ESP32](https://github.com/banana-pixel/QuakeAlert-ESP32) for LED and Serial output).
+
+---
+
 ## Reference: nginx.conf snippet
 
 If you are setting up nginx from scratch, add these two lines inside the `http { }` block of `/etc/nginx/nginx.conf` (e.g. under "Logging Settings" or before `include /etc/nginx/sites-enabled/*;`):

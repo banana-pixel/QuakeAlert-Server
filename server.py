@@ -182,29 +182,51 @@ def get_stations_status():
 
         results = []
         now = datetime.utcnow()
-        
+        # Offline threshold: mark station offline if no heartbeat in this many seconds
+        OFFLINE_THRESHOLD_SEC = 180
+
         for row in rows:
             data = dict(row)
             try:
                 # 1. Parse the text string from DB back to a datetime object
                 last_ping_dt = datetime.strptime(data['last_ping'], "%Y-%m-%d %H:%M:%S")
-                
-                # 2. FIX: Convert it to a Unix Timestamp (Integer) for the App
-                # We assume the time stored is UTC
+                # 2. Convert to Unix timestamp (integer) for the app
                 data['last_ping'] = int(last_ping_dt.replace(tzinfo=timezone.utc).timestamp())
-
-                # 3. Calculate offline status (existing logic)
+                # 3. Mark offline if last heartbeat too old
                 diff = now - last_ping_dt
-                if diff.total_seconds() > 180:
+                if diff.total_seconds() > OFFLINE_THRESHOLD_SEC:
                     data['status'] = 'offline'
+                # 4. Ensure latency and RSSI are strings for the app (Sensor model expects String?)
+                if data.get('latency') is not None and not isinstance(data['latency'], str):
+                    data['latency'] = str(data['latency'])
+                if data.get('RSSI') is not None and not isinstance(data['RSSI'], str):
+                    data['RSSI'] = str(data['RSSI'])
             except Exception as e:
                 print(f"Error parsing date: {e}")
                 data['status'] = 'unknown'
-                data['last_ping'] = 0 # Fallback so app doesn't crash
+                data['last_ping'] = 0
 
             results.append(data)
 
         return jsonify(results)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/admin/cleanup-test', methods=['POST'])
+def cleanup_test_data():
+    """Remove test rows (e.g. station_id='x', lokasi='x') from laporan. Requires API key."""
+    err = _require_api_key()
+    if err:
+        return err
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM laporan WHERE station_id = ? OR lokasi = ?", ('x', 'x'))
+        deleted = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return jsonify({"status": "ok", "deleted": deleted}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
