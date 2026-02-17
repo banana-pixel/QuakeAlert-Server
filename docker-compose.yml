@@ -39,6 +39,12 @@ services:
       - sqlite_data:/app/data  # Menyimpan database agar tidak hilang
     ports:
       - "127.0.0.1:5000:5000"  # Expose ke host agar Nginx bisa akses
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   bridge:
     build: .
