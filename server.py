@@ -183,7 +183,7 @@ def get_stations_status():
         results = []
         now = datetime.utcnow()
         # Offline threshold: mark station offline if no heartbeat in this many seconds
-        OFFLINE_THRESHOLD_SEC = 180
+        OFFLINE_THRESHOLD_SEC = 120
 
         for row in rows:
             data = dict(row)

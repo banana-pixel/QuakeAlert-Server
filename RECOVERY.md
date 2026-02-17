@@ -213,13 +213,21 @@ Response: `{"status":"ok","deleted":N}`. This only deletes rows where `station_i
 
 ## Sensor shows "offline" in the app
 
-Stations are marked **offline** when the server has not received a heartbeat for **3 minutes** (180 seconds).
+Stations are marked **offline** when the server has not received a heartbeat for **2 minutes** (120 seconds).
 
 1. **ESP32** sends a heartbeat every **60 seconds** on `seismo/heartbeat` (when MQTT is connected). Payload: `stationId`, `lokasi`, `rssi`, `latency`, `status`.
 2. **Bridge** forwards each heartbeat to `POST /heartbeat` (with API key). If the bridge gets 401, heartbeats are not stored — check that the bridge has the same `REPORT_API_KEY` as the server.
 3. **Check:** `docker logs quake-bridge` — you should see no "Failed to forward heartbeat" errors. If the ESP32 is powered and on WiFi, heartbeats should appear every ~60s and the app should show the sensor **online** after the next refresh.
 
 If the sensor stays offline: ensure the ESP32 is connected to WiFi and MQTT (see [QuakeAlert-ESP32](https://github.com/banana-pixel/QuakeAlert-ESP32) for LED and Serial output).
+
+---
+
+## Alerts not working / geo shows 0,0
+
+**Geo 0,0:** The ESP32 gets lat/lon from geolocation (ip-api.com or ipinfo.io). If both fail or the fallback didn’t set coordinates, alerts and reports can have lat/lon 0,0. Ensure the ESP32 has run `getLokasi()` successfully at least once (check Serial for "Lokasi Updated"). The firmware now sets lat/lon from ipinfo.io’s `loc` field in the fallback so geo is not 0,0 when ip-api.com fails.
+
+**Alerts not received on the app:** (1) In the app, subscribe to the same **ntfy topic** as in `NTFY_TOPIC` in the server `.env`. (2) For Play flavor, ensure `config/firebase-key.json` is valid and Ntfy is configured to use it. (3) On the server, check `docker logs quake-bridge` when an event happens — you should see no "Error sending Alert to NTFY". (4) Test with a manual MQTT publish to `seismo/alert` and confirm the app receives the notification.
 
 ---
 
