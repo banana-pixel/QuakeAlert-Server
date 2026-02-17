@@ -14,6 +14,32 @@ Back these up **before** you lose the server. Store them in a secure place (pass
 | **`config/pwfile`** | Mosquitto user/password. Copy from `config/pwfile.example` and replace with your hashed passwords. |
 | **`config/firebase-key.json`** | Firebase service account JSON for Ntfy (Play Store push). Download from Firebase Console. |
 | **`nginx_quakealert.conf`** | Nginx server block for your domain. Use `nginx_quakealert.conf.example` in this repo as a template if you lost the original. |
+| **Database (SQLite)** | Earthquake reports and station status. Back up regularly (see section 1b). |
+
+### 1b. Back up the database (quake history + stations)
+
+The report server stores data in a Docker volume. Back it up so you can restore history after a rebuild.
+
+**One-time backup (run on the server):**
+
+```bash
+cd ~/QuakeAlert-Server   # or your repo path
+
+mkdir -p backup
+docker cp quake-report:/app/data/laporan_gempa.db backup/laporan_gempa_$(date +%Y%m%d).db
+```
+
+Copy `backup/laporan_gempa_YYYYMMDD.db` to a safe place (another server, cloud storage, or local machine).
+
+**Optional: schedule daily backups (cron):**
+
+```bash
+crontab -e
+# Add a line (runs daily at 2 AM):
+0 2 * * * mkdir -p /root/QuakeAlert-Server/backup && docker cp quake-report:/app/data/laporan_gempa.db /root/QuakeAlert-Server/backup/laporan_gempa_$(date +\%Y\%m\%d).db
+```
+
+Then periodically copy the `backup/` folder off the server (e.g. with `scp` or rsync).
 
 ---
 
@@ -77,6 +103,24 @@ docker compose up -d --build
 
 Check that containers are up: `docker compose ps`. The report server should show `(healthy)` after the healthcheck passes (see section 5).
 
+### 3.6 Restore the database (optional)
+
+If you have a backup of `laporan_gempa.db` and want to restore quake history and station data:
+
+```bash
+# Stop the report server so the DB isn’t in use
+docker compose stop report-server
+
+# Copy your backup into the running container (start it once for the copy)
+docker compose start report-server
+docker cp /path/to/your/laporan_gempa_YYYYMMDD.db quake-report:/app/data/laporan_gempa.db
+
+# Restart so the app picks up the file
+docker compose restart report-server
+```
+
+If the stack is not running yet, start it once, then run the `docker cp` line above (with your backup path), then `docker compose restart report-server`.
+
 ---
 
 ## 4. Quick checklist
@@ -89,6 +133,7 @@ Check that containers are up: `docker compose ps`. The report server should show
 - [ ] SSL certificate (Certbot) if new server
 - [ ] `docker compose up -d --build` run successfully
 - [ ] `docker compose ps` shows quake-report as `(healthy)`
+- [ ] (Optional) Database restored from backup (section 3.6) if you had one
 
 ---
 
