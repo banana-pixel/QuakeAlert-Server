@@ -17,20 +17,24 @@ Back these up **before** you lose the server. Store them in a secure place (pass
 
 ---
 
-## 2. Define the chat rate-limit zone (required for nginx)
+## 2. Rate-limit zones in nginx (required)
 
-The nginx config uses `limit_req zone=chat_limit`. You **must** define this zone somewhere that nginx loads in the `http` block (e.g. in `/etc/nginx/nginx.conf` or an included file).
-
-Add this **once** inside the `http { ... }` block (not inside a `server` block):
+The QuakeAlert server block uses two rate-limit zones. Define both **once** inside the `http { ... }` block in your main nginx config (e.g. `/etc/nginx/nginx.conf`), not inside a `server` block:
 
 ```nginx
-# Rate limit for chat (Socket.IO) – e.g. in /etc/nginx/nginx.conf inside http { }
-limit_req_zone $binary_remote_addr zone=chat_limit:10m rate=10r/s;
+# Chat (Socket.IO): 1 req/s per IP, burst 5
+limit_req_zone $binary_remote_addr zone=chat_limit:10m rate=1r/s;
+
+# Report API (/laporan, /stations): 10 req/s per IP, burst 20
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 ```
 
 Then reload nginx: `sudo nginx -t && sudo systemctl reload nginx`.
 
-If this zone is missing, nginx will fail to start or fail to load the QuakeAlert server block.
+- **chat_limit** is used in the `location /socket.io/` block (see `nginx_quakealert.conf.example`).
+- **api_limit** is used in the `location /laporan` and `location /stations` blocks to protect the report server from abuse.
+
+If either zone is missing, nginx may fail to start or fail to load the QuakeAlert server block.
 
 ---
 
@@ -52,7 +56,7 @@ cd QuakeAlert-Server
 ### 3.3 Nginx
 
 - Copy your backed-up **`nginx_quakealert.conf`** to your nginx sites (e.g. `/etc/nginx/sites-available/` and symlink in `sites-enabled/`), **or** copy `nginx_quakealert.conf.example` to that path and rename it, then adjust `server_name` and SSL paths if your domain or Certbot paths differ.
-- Ensure the **`limit_req_zone`** for `chat_limit` is defined in your main nginx config (see section 2).
+- Ensure both **`limit_req_zone`** (chat_limit and api_limit) are defined in your main nginx config (see section 2).
 - Run: `sudo nginx -t && sudo systemctl reload nginx`.
 
 ### 3.4 SSL (if new server)
@@ -71,7 +75,7 @@ sudo certbot --nginx -d quakealert.bananapixel.my.id
 docker compose up -d --build
 ```
 
-Check that containers are up: `docker compose ps`. The report server responds at `http://127.0.0.1:5000/` (health check).
+Check that containers are up: `docker compose ps`. The report server should show `(healthy)` after the healthcheck passes (see section 5).
 
 ---
 
@@ -81,13 +85,26 @@ Check that containers are up: `docker compose ps`. The report server responds at
 - [ ] `config/pwfile` (from backup or from `config/pwfile.example`)
 - [ ] `config/firebase-key.json` in `config/`
 - [ ] Nginx server block in place (from backup or `nginx_quakealert.conf.example`)
-- [ ] `limit_req_zone chat_limit` defined in nginx `http` block
+- [ ] Both `limit_req_zone` (chat_limit and api_limit) defined in nginx `http` block (section 2)
 - [ ] SSL certificate (Certbot) if new server
 - [ ] `docker compose up -d --build` run successfully
+- [ ] `docker compose ps` shows quake-report as `(healthy)`
 
 ---
 
-## 5. Optional: Back up the live nginx config into the repo
+## 5. Report-server healthcheck
+
+The **report-server** service in `docker-compose.yml` has a healthcheck that hits `http://127.0.0.1:5000/` (the Flask root route) from inside the container. Docker uses it to mark the container as healthy or unhealthy.
+
+- **Command:** Python one-liner using `urllib.request.urlopen` (no `curl` required; the image is Python-only).
+- **Settings:** `interval: 30s`, `timeout: 10s`, `retries: 3`, `start_period: 40s`.
+- **Result:** After startup, `docker compose ps` will show `(healthy)` for quake-report when the check passes, or `(unhealthy)` if the app is not responding. This allows orchestrators or restart policies to react to a stuck Flask process.
+
+If you change the healthcheck (e.g. different interval or command), document it here or in the README.
+
+---
+
+## 6. Optional: Back up the live nginx config into the repo
 
 If you want the **exact** live config in the repo (e.g. for a different branch or backup), copy it to a name that is **not** in `.gitignore`, for example:
 
@@ -97,3 +114,14 @@ cp nginx_quakealert.conf nginx_quakealert.conf.backup
 ```
 
 Do **not** commit `.env`, `config/pwfile`, or `config/firebase-key.json`; they contain secrets.
+
+---
+
+## Reference: nginx.conf snippet
+
+If you are setting up nginx from scratch, add these two lines inside the `http { }` block of `/etc/nginx/nginx.conf` (e.g. under "Logging Settings" or before `include /etc/nginx/sites-enabled/*;`):
+
+```nginx
+limit_req_zone $binary_remote_addr zone=chat_limit:10m rate=1r/s;
+limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
+```

@@ -2,8 +2,8 @@
 # Copy to your nginx config (e.g. /etc/nginx/sites-available/) and adjust server_name
 # and SSL paths if your domain or Certbot paths differ.
 #
-# IMPORTANT: You must define limit_req_zone for "chat_limit" in your main nginx config
-# (inside the http { } block). See RECOVERY.md section 2.
+# IMPORTANT: Define limit_req_zone for "chat_limit" and "api_limit" in your main nginx
+# config (inside the http { } block). See RECOVERY.md section 2 and Reference.
 
 server {
     server_name quakealert.bananapixel.my.id;
@@ -27,6 +27,7 @@ server {
 
     # --- 2. FLASK (REPORT API) ---
     location /laporan {
+        limit_req zone=api_limit burst=20 nodelay;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -35,6 +36,7 @@ server {
 
     # --- FLASK (STATIONS API) ---
     location /stations {
+        limit_req zone=api_limit burst=20 nodelay;
         proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
