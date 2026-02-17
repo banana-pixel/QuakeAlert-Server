@@ -12,6 +12,7 @@ CORS(app)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'data')
 DB_FILE = os.path.join(DATA_DIR, "laporan_gempa.db")
+PAGE_SIZE = 20  # reports per page for GET /laporan
 
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
@@ -88,10 +89,18 @@ def tambah_laporan():
 @app.route('/laporan', methods=['GET'])
 def dapatkan_laporan():
     try:
+        page = request.args.get('page', 1, type=int)
+        if page < 1:
+            page = 1
+        offset = (page - 1) * PAGE_SIZE
+
         conn = sqlite3.connect(DB_FILE)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM laporan ORDER BY id DESC LIMIT 50") # Added LIMIT for safety
+        cursor.execute(
+            "SELECT * FROM laporan ORDER BY id DESC LIMIT ? OFFSET ?",
+            (PAGE_SIZE, offset)
+        )
         laporan_rows = cursor.fetchall()
         conn.close()
 
