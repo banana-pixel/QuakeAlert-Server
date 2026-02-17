@@ -25,6 +25,9 @@ NTFY_USER = os.getenv("NTFY_USER", "guest")
 NTFY_PASS = os.getenv("NTFY_PASS", "guest")
 
 REPORT_ENDPOINT = os.getenv("REPORT_ENDPOINT", "http://localhost:5000/laporan")
+REPORT_API_KEY = os.getenv("REPORT_API_KEY", "").strip()
+REPORT_HEADERS = {"X-API-Key": REPORT_API_KEY} if REPORT_API_KEY else {}
+
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
@@ -82,8 +85,8 @@ def on_message(client, userdata, msg):
                 base_url = REPORT_ENDPOINT.rsplit('/', 1)[0]
                 heartbeat_url = f"{base_url}/heartbeat"
                 
-                # Forward the payload directly
-                requests.post(heartbeat_url, json=payload, timeout=2)
+                # Forward the payload directly (with API key if set)
+                requests.post(heartbeat_url, json=payload, headers=REPORT_HEADERS, timeout=2)
             except Exception as e:
                 print(f"Failed to forward heartbeat: {e}")
             
@@ -169,7 +172,7 @@ def on_message(client, userdata, msg):
             )
             
             try:
-                requests.post(REPORT_ENDPOINT, json=payload, timeout=5)
+                requests.post(REPORT_ENDPOINT, json=payload, headers=REPORT_HEADERS, timeout=5)
             except Exception as e:
                 print(f"Failed to save alert to DB: {e}")
 
@@ -177,7 +180,7 @@ def on_message(client, userdata, msg):
         elif msg.topic == "seismo/report":
             # Save to Database
             try:
-                response = requests.post(REPORT_ENDPOINT, json=payload, timeout=10)
+                response = requests.post(REPORT_ENDPOINT, json=payload, headers=REPORT_HEADERS, timeout=10)
                 print(f"Report from {station_id} saved to DB. Code: {response.status_code}")
             except Exception as e:
                 print(f"Failed to save report to DB: {e}")

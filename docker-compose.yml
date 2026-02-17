@@ -35,6 +35,8 @@ services:
     container_name: quake-report
     restart: unless-stopped
     command: python server.py
+    env_file:
+      - .env
     volumes:
       - sqlite_data:/app/data  # Menyimpan database agar tidak hilang
     ports:

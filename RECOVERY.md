@@ -10,7 +10,7 @@ Back these up **before** you lose the server. Store them in a secure place (pass
 
 | File | Purpose |
 |------|--------|
-| **`.env`** | MQTT, Ntfy, Telegram secrets. Copy from `.env.example` and fill in real values. |
+| **`.env`** | MQTT, Ntfy, Telegram secrets, and **REPORT_API_KEY** (for write endpoints). Copy from `.env.example` and fill in real values. |
 | **`config/pwfile`** | Mosquitto user/password. Copy from `config/pwfile.example` and replace with your hashed passwords. |
 | **`config/firebase-key.json`** | Firebase service account JSON for Ntfy (Play Store push). Download from Firebase Console. |
 | **`nginx_quakealert.conf`** | Nginx server block for your domain. Use `nginx_quakealert.conf.example` in this repo as a template if you lost the original. |
@@ -110,7 +110,7 @@ cd QuakeAlert-Server
 
 ### 3.2 Restore secrets and config
 
-- Copy your backed-up **`.env`** into the repo root. If you don’t have it, copy `.env.example` to `.env` and fill in MQTT, Ntfy, and Telegram values.
+- Copy your backed-up **`.env`** into the repo root. If you don’t have it, copy `.env.example` to `.env` and fill in MQTT, Ntfy, Telegram, and **REPORT_API_KEY** (required for POST /laporan and POST /heartbeat; generate with `openssl rand -hex 32`).
 - Copy **`config/pwfile`** (or create from `config/pwfile.example` and set Mosquitto passwords).
 - Place **`config/firebase-key.json`** in the `config/` folder (required for Ntfy Firebase push).
 
@@ -160,7 +160,7 @@ If the stack is not running yet, start it once, then run the `docker cp` line ab
 
 ## 4. Quick checklist
 
-- [ ] `.env` in repo root (from backup or `.env.example` filled in)
+- [ ] `.env` in repo root with **REPORT_API_KEY** set (from backup or `.env.example` filled in)
 - [ ] `config/pwfile` (from backup or from `config/pwfile.example`)
 - [ ] `config/firebase-key.json` in `config/`
 - [ ] Nginx server block in place (from backup or `nginx_quakealert.conf.example`)

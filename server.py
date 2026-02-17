@@ -15,6 +15,18 @@ DATA_DIR = os.path.join(BASE_DIR, 'data')
 DB_FILE = os.path.join(DATA_DIR, "laporan_gempa.db")
 PAGE_SIZE = 20  # reports per page for GET /laporan
 
+# API key for write endpoints (POST /laporan, POST /heartbeat). Set via env REPORT_API_KEY.
+REPORT_API_KEY = os.getenv("REPORT_API_KEY", "").strip()
+
+def _require_api_key():
+    """Return (response, status_code) if request is unauthorized; else None."""
+    if not REPORT_API_KEY:
+        return jsonify({"error": "Server misconfiguration: REPORT_API_KEY not set"}), 503
+    key = request.headers.get("X-API-Key") or request.headers.get("Authorization", "").replace("Bearer ", "")
+    if key != REPORT_API_KEY:
+        return jsonify({"error": "Unauthorized"}), 401
+    return None
+
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
     print(f"Created data directory at: {DATA_DIR}")
@@ -59,6 +71,9 @@ def health_check():
 
 @app.route('/laporan', methods=['POST'])
 def tambah_laporan():
+    err = _require_api_key()
+    if err:
+        return err
     if not request.is_json:
         return jsonify({"error": "Invalid JSON"}), 400
     data = request.get_json()
@@ -115,6 +130,9 @@ def dapatkan_laporan():
 
 @app.route('/heartbeat', methods=['POST'])
 def receive_heartbeat():
+    err = _require_api_key()
+    if err:
+        return err
     if not request.is_json:
         return jsonify({"error": "Invalid JSON"}), 400
     data = request.get_json()
