@@ -5,3 +5,7 @@ config/pwfile
 __pycache__/
 *.pyc
 config/firebase-key.json
+
+# Backups and archives
+*.tar.gz
+quakealert-backup-*/

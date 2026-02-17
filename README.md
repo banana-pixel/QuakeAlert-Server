@@ -25,3 +25,6 @@ cd QuakeAlert-Server
 # Copy the example env file and fill in your details
 cp .env.example .env
 nano .env
+```
+
+**Recovery:** If you are rebuilding from a fresh clone or new server, see **[RECOVERY.md](RECOVERY.md)** for required backups (`.env`, nginx config, `limit_req_zone`, etc.) and step-by-step restore instructions.
