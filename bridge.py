@@ -8,7 +8,10 @@ import os
 import sys
 import urllib3
 import time
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 # Suppress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -102,7 +105,8 @@ def on_message(client, userdata, msg):
                         verify=False,
                         timeout=5
                     )
-                except: pass
+                except Exception as e:
+                    logger.warning("Ntfy forward failed for %s: %s", station_id, e)
 
             if payload.get("event") == "startup":
                 lokasi = payload.get('lokasi', 'N/A')

@@ -1,7 +1,7 @@
-paho-mqtt
-requests
-python-telegram-bot
-asyncio
-flask
-flask-cors
-python-dotenv
+# Pinned versions for reproducible installs. Update with: pip install -U <pkg> && pip freeze | grep <pkg>
+paho-mqtt==2.1.0
+requests==2.32.3
+python-telegram-bot==21.7
+flask==3.0.3
+flask-cors==5.0.0
+python-dotenv==1.0.1
