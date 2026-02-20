@@ -69,6 +69,8 @@ services:
     ports:
       - "3000:3000"
     restart: always
+    environment:
+      - CORS_ORIGIN=https://quakealert.bananapixel.my.id
 
 volumes:
   mosquitto_data:

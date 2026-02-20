@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from flask_cors import CORS
 import sqlite3
 import os
+import re
 
 app = Flask(__name__)
 # Restrict CORS to our domain only (Android app is not browser-bound; CORS applies to web clients)
@@ -17,6 +18,18 @@ PAGE_SIZE = 20  # reports per page for GET /laporan
 
 # API key for write endpoints (POST /laporan, POST /heartbeat). Set via env REPORT_API_KEY.
 REPORT_API_KEY = os.getenv("REPORT_API_KEY", "").strip()
+
+def _normalize_latency(val):
+    """Normalize latency to int (ms) for storage. ESP32 may send e.g. '123 ms' or a number."""
+    if val is None:
+        return None
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        m = re.search(r'\d+', val)
+        return int(m.group()) if m else None
+    return None
+
 
 def _require_api_key():
     """Return (response, status_code) if request is unauthorized; else None."""
@@ -138,7 +151,7 @@ def receive_heartbeat():
     data = request.get_json()
     station_id = data.get('stationId') # Note: matching the JSON key from firmware
 
-    latency = data.get('latency')
+    latency = _normalize_latency(data.get('latency'))
 
     rssi = data.get('rssi')
     

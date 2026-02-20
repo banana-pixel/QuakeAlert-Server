@@ -4,10 +4,11 @@ const fs = require("fs");
 
 // Create a explicit HTTP server to handle the upgrade properly
 const server = http.createServer();
+const CORS_ORIGIN = process.env.CORS_ORIGIN || "https://quakealert.bananapixel.my.id";
 const io = new Server(server, {
   path: "/socket.io/", // Explicitly match your Nginx path
   cors: {
-    origin: "*",
+    origin: CORS_ORIGIN,
     methods: ["GET", "POST"]
   },
   perMessageDeflate: false, // Prevents RSV1 bit errors
