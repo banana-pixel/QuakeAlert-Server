@@ -139,16 +139,16 @@ def on_message(client, userdata, msg):
                 except:
                     intensity_desc = intensitas
 
-            title = f"⚠️ PERINGATAN GEMPA {intensity_desc.upper()} (INTENSITY {intensity_short})"
+            title = f"⚠️ EARTHQUAKE WARNING {intensity_desc.upper()} (INTENSITY {intensity_short})"
             
-            # Body Format:
+            # Body format (English labels, timestamp in UTC):
             # Station : SEIS-01
-            # Lokasi : ...
+            # Location : ...
             message_body = (
                 f"Station : {station_id}\n"
-                f"Lokasi : {lokasi}\n"
-                f"Waktu: {waktu}\n"
-                f"Intensitas : {intensitas}"
+                f"Location : {lokasi}\n"
+                f"Time: {waktu} UTC\n"
+                f"Intensity : {intensitas}"
             )
 
             # Ntfy Warning (High Priority)
