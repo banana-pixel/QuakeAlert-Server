@@ -172,7 +172,7 @@ def on_message(client, userdata, msg):
                     headers={
                         "Title": title.encode('utf-8'),
                         "Priority": "5",
-                        "Tags": f"warning,{geo_tag}"
+                        "Tags": f"warning,earthquake,{geo_tag}"
                     },
                     data=message_body.encode('utf-8'),
                     verify=False,
