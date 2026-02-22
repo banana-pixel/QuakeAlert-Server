@@ -67,9 +67,20 @@ def init_db():
             latency INTEGER,
             RSSI INTEGER,
             status TEXT,
-            location TEXT
+            location TEXT,
+            latitude REAL,
+            longitude REAL
         )
     ''')
+    # Migration: add latitude, longitude columns if missing (existing DBs)
+    cursor.execute("PRAGMA table_info(stations)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if 'latitude' not in columns:
+        cursor.execute("ALTER TABLE stations ADD COLUMN latitude REAL")
+        print("Migration: added stations.latitude")
+    if 'longitude' not in columns:
+        cursor.execute("ALTER TABLE stations ADD COLUMN longitude REAL")
+        print("Migration: added stations.longitude")
     # Migrate: drop deskripsi column if it exists (legacy schema)
     try:
         cursor.execute("PRAGMA table_info(laporan)")
@@ -181,7 +192,22 @@ def receive_heartbeat():
     rssi = data.get('rssi')
     
     location = data.get('lokasi', 'Unknown')
-    
+    lat = data.get('lat')
+    lon = data.get('lon')
+    # Normalize lat/lon to float or None (ESP32 may send numbers or strings)
+    latitude = None
+    longitude = None
+    if lat is not None:
+        try:
+            latitude = float(lat) if lat != '' and lat != 0 else None
+        except (TypeError, ValueError):
+            pass
+    if lon is not None:
+        try:
+            longitude = float(lon) if lon != '' and lon != 0 else None
+        except (TypeError, ValueError):
+            pass
+
     if not station_id:
         return jsonify({"error": "Missing stationId"}), 400
 
@@ -191,17 +217,19 @@ def receive_heartbeat():
     try:
         conn = sqlite3.connect(DB_FILE)
         cursor = conn.cursor()
-        # Upsert: Insert or Update if exists
+        # Upsert: Insert or Update if exists (only update lat/lon when provided)
         cursor.execute('''
-            INSERT INTO stations (station_id, last_ping, latency, RSSI, location, status)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO stations (station_id, last_ping, latency, RSSI, location, status, latitude, longitude)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(station_id) DO UPDATE SET
             last_ping=excluded.last_ping,
             latency=excluded.latency,
             RSSI=excluded.RSSI,
             location=excluded.location,
-            status='online'
-        ''', (station_id, current_time, latency, rssi, location, 'online'))
+            status='online',
+            latitude=CASE WHEN excluded.latitude IS NOT NULL THEN excluded.latitude ELSE stations.latitude END,
+            longitude=CASE WHEN excluded.longitude IS NOT NULL THEN excluded.longitude ELSE stations.longitude END
+        ''', (station_id, current_time, latency, rssi, location, 'online', latitude, longitude))
         conn.commit()
         conn.close()
         return jsonify({"status": "updated"}), 200
