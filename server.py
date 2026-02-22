@@ -47,7 +47,6 @@ if not os.path.exists(DATA_DIR):
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    # Updated table schema to include latitude and longitude
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS laporan (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,7 +56,6 @@ def init_db():
             durasi REAL NOT NULL,
             pga_maks REAL NOT NULL,
             intensitas_maks INTEGER NOT NULL,
-            deskripsi TEXT NOT NULL,
             latitude REAL,
             longitude REAL
         )
@@ -72,6 +70,35 @@ def init_db():
             location TEXT
         )
     ''')
+    # Migrate: drop deskripsi column if it exists (legacy schema)
+    try:
+        cursor.execute("PRAGMA table_info(laporan)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'deskripsi' in columns:
+            cursor.execute('''
+                CREATE TABLE laporan_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    station_id TEXT NOT NULL,
+                    lokasi TEXT NOT NULL,
+                    waktu_kejadian TEXT NOT NULL,
+                    durasi REAL NOT NULL,
+                    pga_maks REAL NOT NULL,
+                    intensitas_maks INTEGER NOT NULL,
+                    latitude REAL,
+                    longitude REAL
+                )
+            ''')
+            cursor.execute('''
+                INSERT INTO laporan_new (id, station_id, lokasi, waktu_kejadian, durasi, pga_maks, intensitas_maks, latitude, longitude)
+                SELECT id, station_id, lokasi, waktu_kejadian, durasi, pga_maks, intensitas_maks, latitude, longitude FROM laporan
+            ''')
+            cursor.execute('DROP TABLE laporan')
+            cursor.execute('ALTER TABLE laporan_new RENAME TO laporan')
+            conn.commit()
+            print("Migrated: removed deskripsi column.")
+    except Exception as e:
+        conn.rollback()
+        print(f"Migration check (deskripsi): {e}")
     conn.commit()
     conn.close()
     print("Database initialized.")
@@ -92,7 +119,6 @@ def tambah_laporan():
     data = request.get_json()
 
     try:
-        # 'deskripsi' is optional; app derives it from intensitas for localization
         required_keys = ['stationId', 'lokasi', 'waktu', 'durasi', 'pga', 'intensitas']
         if not all(key in data for key in required_keys):
             return jsonify({"status": "gagal", "error": "Missing JSON keys"}), 400
@@ -102,11 +128,10 @@ def tambah_laporan():
         # Insert latitude and longitude (defaulting to None/NULL if not provided)
         cursor.execute(
             """INSERT INTO laporan (station_id, lokasi, waktu_kejadian, durasi, pga_maks, 
-               intensitas_maks, deskripsi, latitude, longitude) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               intensitas_maks, latitude, longitude) 
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (data['stationId'], data['lokasi'], data['waktu'], data['durasi'],
-             data['pga'], data['intensitas'], '',
-             data.get('lat'), data.get('lon'))
+             data['pga'], data['intensitas'], data.get('lat'), data.get('lon'))
         )
         conn.commit()
         conn.close()
