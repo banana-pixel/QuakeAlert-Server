@@ -92,8 +92,8 @@ def tambah_laporan():
     data = request.get_json()
 
     try:
-        # Added 'lat' and 'lon' to the validation and extraction logic
-        required_keys = ['stationId', 'lokasi', 'waktu', 'durasi', 'pga', 'intensitas', 'deskripsi']
+        # 'deskripsi' is optional; app derives it from intensitas for localization
+        required_keys = ['stationId', 'lokasi', 'waktu', 'durasi', 'pga', 'intensitas']
         if not all(key in data for key in required_keys):
             return jsonify({"status": "gagal", "error": "Missing JSON keys"}), 400
 
@@ -104,8 +104,8 @@ def tambah_laporan():
             """INSERT INTO laporan (station_id, lokasi, waktu_kejadian, durasi, pga_maks, 
                intensitas_maks, deskripsi, latitude, longitude) 
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (data['stationId'], data['lokasi'], data['waktu'], data['durasi'], 
-             data['pga'], data['intensitas'], data['deskripsi'], 
+            (data['stationId'], data['lokasi'], data['waktu'], data['durasi'],
+             data['pga'], data['intensitas'], '',
              data.get('lat'), data.get('lon'))
         )
         conn.commit()
