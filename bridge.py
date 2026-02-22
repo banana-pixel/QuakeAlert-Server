@@ -125,30 +125,41 @@ def on_message(client, userdata, msg):
         elif msg.topic == "seismo/alert":
             lokasi = payload.get("lokasi", "N/A")
             waktu = payload.get("waktu", "N/A")
-            intensitas = payload.get("intensitas", "N/A") # e.g. "VI (Kuat)"
+            intensitas_raw = payload.get("intensitas", "N/A")  # e.g. "VI (Kuat)" or "IX (Hebat)"
 
             event_lat = str(payload.get("lat", "0"))
             event_lon = str(payload.get("lon", "0"))
 
-            intensity_short = intensitas.split(' ')[0] # "VI"
-            intensity_desc = intensitas
-            if '(' in intensitas:
-                # Extract text inside parenthesis e.g. "Kuat"
+            intensity_short = intensitas_raw.split(' ')[0]  # "VI" or "X+"
+            intensity_desc_id = intensitas_raw
+            if '(' in intensitas_raw:
                 try:
-                    intensity_desc = intensitas.split('(')[1].replace(')', '') 
-                except:
-                    intensity_desc = intensitas
+                    intensity_desc_id = intensitas_raw.split('(')[1].replace(')', '').strip()
+                except Exception:
+                    pass
 
-            title = f"⚠️ EARTHQUAKE WARNING {intensity_desc.upper()} (INTENSITY {intensity_short})"
-            
-            # Body format (English labels, timestamp in UTC):
-            # Station : SEIS-01
-            # Location : ...
+            # Map Indonesian descriptors to English
+            INTENSITY_DESC_EN = {
+                "lemah": "Weak", "weak": "Weak",
+                "sedang": "Moderate", "moderate": "Moderate",
+                "kuat": "Strong", "strong": "Strong",
+                "sangat kuat": "Very Strong", "very strong": "Very Strong",
+                "hebat": "Severe", "severe": "Severe",
+                "sangat hebat": "Very Severe", "very severe": "Very Severe",
+                "ekstrem": "Extreme", "extreme": "Extreme",
+            }
+            intensity_desc_en = INTENSITY_DESC_EN.get(intensity_desc_id.lower(), intensity_desc_id.title())
+
+            # Title: no emoji (ntfy "warning" tag adds one); English only
+            title = f"EARTHQUAKE WARNING {intensity_desc_en.upper()} (INTENSITY {intensity_short})"
+
+            # Body: English labels and English intensity descriptor
+            intensitas_en = f"{intensity_short} ({intensity_desc_en})"
             message_body = (
                 f"Station : {station_id}\n"
                 f"Location : {lokasi}\n"
                 f"Time: {waktu} UTC\n"
-                f"Intensity : {intensitas}"
+                f"Intensity : {intensitas_en}"
             )
 
             # Ntfy Warning (High Priority)
@@ -161,7 +172,7 @@ def on_message(client, userdata, msg):
                     headers={
                         "Title": title.encode('utf-8'),
                         "Priority": "5",
-                        "Tags": f"warning,earthquake,{geo_tag}"
+                        "Tags": f"warning,{geo_tag}"
                     },
                     data=message_body.encode('utf-8'),
                     verify=False,
