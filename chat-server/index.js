@@ -83,13 +83,14 @@ io.on("connection", (socket) => {
         socket.lastMessageTime = now; // Update timer
 
         // Create the message object with server-side timestamp
+        // ✅ FIXED: Use milliseconds (not seconds) for consistency with Android
         const messageWithTime = {
             senderId: data.senderId,
             message: text, // Use the sanitized text
-            timestamp: Math.floor(Date.now() / 1000)
+            timestamp: Date.now()  // Milliseconds (consistent with Android/iOS)
         };
 
-        console.log("New Message Received:", messageWithTime.message);
+        console.log("New Message Received:", messageWithTime.message, "at", messageWithTime.timestamp);
         
         chatHistory.push(messageWithTime);
         if (chatHistory.length > MAX_HISTORY) chatHistory.shift();
