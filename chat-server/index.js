@@ -38,6 +38,9 @@ io.on("connection", (socket) => {
     // 1. Initialize spam tracker for this user
     socket.lastMessageTime = 0;
     
+    // Broadcast updated online count to all clients
+    io.emit("online_count", io.engine.clientsCount);
+    
     setTimeout(() => {
         console.log("Sending history to:", socket.id);
         socket.emit("chat_history", chatHistory);
@@ -100,6 +103,8 @@ io.on("connection", (socket) => {
 
     socket.on("disconnect", () => {
         console.log("User disconnected:", socket.id);
+        // Broadcast updated online count to all remaining clients
+        io.emit("online_count", io.engine.clientsCount);
     });
 });
 
