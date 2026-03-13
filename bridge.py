@@ -37,7 +37,51 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 # Memory to track online sensors for get_status command
 sensors_inventory = {}
 
-# --- ASYNCIO SETUP FOR TELEGRAM ---
+# --- REVERSE GEOCODING HELPER ---
+_NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
+_NOMINATIM_HEADERS = {"User-Agent": "QuakeAlert-Server/1.0"}
+
+def reverse_geocode(lat: str, lon: str) -> str:
+    """Resolve lat/lon to a human-readable city name via Nominatim.
+
+    Returns a formatted string like "Depok, Jawa Barat" or
+    "Unknown Region" on any failure (timeout, bad response, missing fields).
+    Never raises — callers must not crash on geocode failures.
+    """
+    try:
+        r = requests.get(
+            _NOMINATIM_URL,
+            params={"lat": lat, "lon": lon, "format": "json"},
+            headers=_NOMINATIM_HEADERS,
+            timeout=3,
+        )
+        r.raise_for_status()
+        data = r.json()
+        addr = data.get("address", {})
+        # Prefer the most specific populated-place name available, cascade
+        # from village → suburb → city_district → town → city → county.
+        place = (
+            addr.get("village")
+            or addr.get("suburb")
+            or addr.get("city_district")
+            or addr.get("town")
+            or addr.get("city")
+            or addr.get("county")
+        )
+        state = addr.get("state") or addr.get("province") or ""
+        if place and state:
+            return f"{place}, {state}"
+        if place:
+            return place
+        # Last resort: fall back to the raw display name truncated to 60 chars
+        display = data.get("display_name", "")
+        if display:
+            return display[:60]
+    except Exception as exc:
+        logger.warning("reverse_geocode(%s, %s) failed: %s", lat, lon, exc)
+    return "Unknown Region"
+
+
 asyncio_loop = asyncio.new_event_loop()
 
 def start_asyncio_loop(loop):
@@ -78,10 +122,42 @@ def on_message(client, userdata, msg):
         payload = json.loads(payload_string)
         station_id = payload.get('stationId', payload.get('id', 'Unknown'))
 
-        # 1. STATION HEALTH & HEARTBEAT
+        # --- THICK CLOUD: SERVER-SIDE LOCATION ENRICHMENT ---
+        # The ESP32 sends lokasi="Community Node" to protect privacy.
+        # The server intercepts masked coordinates here ONCE per station and
+        # resolves them to a real city via Nominatim. The result is cached in
+        # sensors_inventory so we call the API exactly once per station
+        # lifetime, making us immune to Nominatim rate-limit bans.
+        _generic_labels = {"community node", "unknown", ""}
+        raw_lokasi = str(payload.get("lokasi", "")).lower()
+        if raw_lokasi in _generic_labels:
+            raw_lat = str(payload.get("lat", "0"))
+            raw_lon = str(payload.get("lon", "0"))
+            if raw_lat != "0" and raw_lon != "0":
+                # Ensure an inventory slot exists before reading/writing cache
+                if station_id not in sensors_inventory:
+                    sensors_inventory[station_id] = {}
+                cached = sensors_inventory[station_id].get("resolved_lokasi")
+                if cached:
+                    payload["lokasi"] = cached
+                else:
+                    resolved = reverse_geocode(raw_lat, raw_lon)
+                    sensors_inventory[station_id]["resolved_lokasi"] = resolved
+                    payload["lokasi"] = resolved
+                    logger.info(
+                        "Geocoded station %s → %s", station_id, resolved
+                    )
+        # payload["lokasi"] is now enriched for all downstream consumers
+        # (Telegram, NTFY, SQLite) without any further changes required.
+
         if msg.topic == "seismo/status" or msg.topic == "seismo/heartbeat":
             payload["last_seen"] = int(time.time())
-            sensors_inventory[station_id] = payload
+            # IMPORTANT: Merge rather than overwrite so that the geocode cache
+            # key "resolved_lokasi" (written above) is never silently wiped by
+            # an incoming heartbeat replacing the entire inventory slot.
+            existing = sensors_inventory.get(station_id, {})
+            existing.update(payload)
+            sensors_inventory[station_id] = existing
             try:
                 # Construct URL (assumes report server is on port 5000)
                 # If REPORT_ENDPOINT is "http://localhost:5000/laporan", we want "http://localhost:5000/heartbeat"
