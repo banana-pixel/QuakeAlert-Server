@@ -7,9 +7,11 @@ services:
     restart: unless-stopped
     ports:
       - "1883:1883"
+      - "8883:8883"
     volumes:
       - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf
       - ./config/pwfile:/mosquitto/config/pwfile
+      - ./config/certs:/mosquitto/config/certs:ro
       - mosquitto_data:/mosquitto/data
 
   ntfy:
