@@ -9,3 +9,10 @@ config/firebase-key.json
 # Backups and archives
 *.tar.gz
 quakealert-backup-*/
+
+# Sensitive Security Files
+config/certs/
+
+# Databases and Backups
+*.db
+backup/
