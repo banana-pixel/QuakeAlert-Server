@@ -4,6 +4,7 @@ import json
 import telegram
 import asyncio
 import threading
+import queue
 import os
 import sys
 import urllib3
@@ -13,7 +14,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# Suppress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- CONFIGURATION ---
@@ -109,7 +109,60 @@ def on_connect(client, userdata, flags, rc, properties):
     else:
         print(f"===> Failed to connect to Broker, return code: {rc}")
 
+# --- MESSAGE WORKER QUEUE ---
+message_queue = queue.Queue(maxsize=2000)
+
+def message_worker():
+    """Background worker to process MQTT messages synchronously without blocking the network loop."""
+    while True:
+        try:
+            client, userdata, msg = message_queue.get()
+            if msg is None:
+                break
+            process_message(client, userdata, msg)
+        except Exception as e:
+            print(f"!!! Error in message_worker: {e}")
+        finally:
+            message_queue.task_done()
+
+# Start worker thread
+worker_thread = threading.Thread(target=message_worker, daemon=True)
+worker_thread.start()
+
+# --- MEMORY LEAK CLEANUP THREAD ---
+def cleanup_worker():
+    """Periodically purges dead sensors from sensors_inventory to prevent unbounded RAM growth."""
+    while True:
+        try:
+            time.sleep(300) # Run every 5 minutes
+            now = int(time.time())
+            stale_keys = []
+            
+            # Identify sensors that haven't pinged in 2 hours (7200 seconds)
+            for sid, data in sensors_inventory.items():
+                if now - data.get("last_seen", 0) > 7200:
+                    stale_keys.append(sid)
+            
+            # Delete stale sensors
+            for sid in stale_keys:
+                del sensors_inventory[sid]
+                
+            if stale_keys:
+                logger.info("Purged %d dead sensors from inventory memory.", len(stale_keys))
+        except Exception as e:
+            print(f"!!! Error in cleanup_worker: {e}")
+
+cleanup_thread = threading.Thread(target=cleanup_worker, daemon=True)
+cleanup_thread.start()
+
 def on_message(client, userdata, msg):
+    # Quickly enqueue to avoid blocking MQTT networking loop
+    try:
+        message_queue.put_nowait((client, userdata, msg))
+    except queue.Full:
+        print(f"!!! Message queue full! Dropped message on {msg.topic}")
+
+def process_message(client, userdata, msg):
     global sensors_inventory
     station_id = "Unknown"
     payload_string = msg.payload.decode('utf-8')
@@ -178,7 +231,6 @@ def on_message(client, userdata, msg):
                         f"{NTFY_SERVER}/seismo_status",
                         auth=(NTFY_USER, NTFY_PASS),
                         data=payload_string.encode('utf-8'),
-                        verify=False,
                         timeout=5
                     )
                 except Exception as e:
@@ -251,7 +303,6 @@ def on_message(client, userdata, msg):
                         "Tags": f"warning,earthquake,{geo_tag}"
                     },
                     data=message_body.encode('utf-8'),
-                    verify=False,
                     timeout=5
                 )
             except Exception as e:

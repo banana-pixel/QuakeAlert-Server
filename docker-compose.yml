@@ -36,7 +36,7 @@ services:
     build: .
     container_name: quake-report
     restart: unless-stopped
-    command: python server.py
+    command: sh -c "python -c 'import server; server.init_db()' && gunicorn -w 4 -b 0.0.0.0:5000 server:app"
     env_file:
       - .env
     volumes:

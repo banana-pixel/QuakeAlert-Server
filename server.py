@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, g
 from datetime import datetime, timezone
 from flask_cors import CORS
 import sqlite3
@@ -31,12 +31,17 @@ def _normalize_latency(val):
     return None
 
 
+import hmac
+
 def _require_api_key():
     """Return (response, status_code) if request is unauthorized; else None."""
     if not REPORT_API_KEY:
         return jsonify({"error": "Server misconfiguration: REPORT_API_KEY not set"}), 503
     key = request.headers.get("X-API-Key") or request.headers.get("Authorization", "").replace("Bearer ", "")
-    if key != REPORT_API_KEY:
+    key = key or ""
+    
+    # Use hmac.compare_digest for constant-time comparison to prevent timing attacks
+    if not hmac.compare_digest(key, REPORT_API_KEY):
         return jsonify({"error": "Unauthorized"}), 401
     return None
 
@@ -81,6 +86,10 @@ def init_db():
     if 'longitude' not in columns:
         cursor.execute("ALTER TABLE stations ADD COLUMN longitude REAL")
         print("Migration: added stations.longitude")
+    # Add Indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_laporan_id ON laporan(id DESC)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_laporan_station ON laporan(station_id, waktu_kejadian)")
+    
     # Migrate: drop deskripsi column if it exists (legacy schema)
     try:
         cursor.execute("PRAGMA table_info(laporan)")
@@ -114,6 +123,18 @@ def init_db():
     conn.close()
     print("Database initialized.")
 
+def get_db():
+    if 'db' not in g:
+        g.db = sqlite3.connect(DB_FILE)
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+@app.teardown_appcontext
+def close_db(exception):
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
 # --- ROUTES ---
 
 @app.route('/', methods=['GET'])
@@ -134,7 +155,7 @@ def tambah_laporan():
         if not all(key in data for key in required_keys):
             return jsonify({"status": "gagal", "error": "Missing JSON keys"}), 400
 
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         cursor = conn.cursor()
         # Insert latitude and longitude (defaulting to None/NULL if not provided)
         cursor.execute(
@@ -145,7 +166,6 @@ def tambah_laporan():
              data['pga'], data['intensitas'], data.get('lat'), data.get('lon'))
         )
         conn.commit()
-        conn.close()
         return jsonify({"status": "sukses"}), 201
     except Exception as e:
         print(f"Error inserting data: {e}")
@@ -159,15 +179,13 @@ def dapatkan_laporan():
             page = 1
         offset = (page - 1) * PAGE_SIZE
 
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM laporan ORDER BY id DESC LIMIT ? OFFSET ?",
             (PAGE_SIZE, offset)
         )
         laporan_rows = cursor.fetchall()
-        conn.close()
 
         laporan_list = [dict(row) for row in laporan_rows]
         return jsonify(laporan_list)
@@ -215,7 +233,7 @@ def receive_heartbeat():
     current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         cursor = conn.cursor()
         # Upsert: Insert or Update if exists (only update lat/lon when provided)
         cursor.execute('''
@@ -231,7 +249,6 @@ def receive_heartbeat():
             longitude=CASE WHEN excluded.longitude IS NOT NULL THEN excluded.longitude ELSE stations.longitude END
         ''', (station_id, current_time, latency, rssi, location, 'online', latitude, longitude))
         conn.commit()
-        conn.close()
         return jsonify({"status": "updated"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -239,12 +256,10 @@ def receive_heartbeat():
 @app.route('/stations', methods=['GET'])
 def get_stations_status():
     try:
-        conn = sqlite3.connect(DB_FILE)
-        conn.row_factory = sqlite3.Row
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM stations")
         rows = cursor.fetchall()
-        conn.close()
 
         results = []
         now = datetime.now(timezone.utc)
@@ -286,12 +301,11 @@ def cleanup_test_data():
     if err:
         return err
     try:
-        conn = sqlite3.connect(DB_FILE)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM laporan WHERE station_id = ? OR lokasi = ?", ('x', 'x'))
         deleted = cursor.rowcount
         conn.commit()
-        conn.close()
         return jsonify({"status": "ok", "deleted": deleted}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
