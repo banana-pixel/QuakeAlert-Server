@@ -138,7 +138,17 @@ docker compose up -d --build
 
 Check that containers are up: `docker compose ps`. The report server should show `(healthy)` after the healthcheck passes (see section 5).
 
-### 3.6 Restore the database (optional)
+### 3.6 Create Ntfy Admin User (Required for publishing)
+
+Since you enabled authentication, you must create an admin user for the bridge to use for publishing:
+
+```bash
+docker exec -it quake-ntfy ntfy user add --role=admin <username>
+```
+
+Replace `<username>` with the one you defined in `.env` (`NTFY_USER`). Follow the prompts to set the password.
+
+### 3.7 Restore the database (optional)
 
 If you have a backup of `laporan_gempa.db` and want to restore quake history and station data:
 
@@ -168,7 +178,8 @@ If the stack is not running yet, start it once, then run the `docker cp` line ab
 - [ ] SSL certificate (Certbot) if new server
 - [ ] `docker compose up -d --build` run successfully
 - [ ] `docker compose ps` shows quake-report as `(healthy)`
-- [ ] (Optional) Database restored from backup (section 3.6) if you had one
+- [ ] Create Ntfy admin user for the bridge (section 3.6)
+- [ ] (Optional) Database restored from backup (section 3.7) if you had one
 
 ---
 
