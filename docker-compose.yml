@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
     command: serve
     environment:
-      - NTFY_BASE_URL=https://quakealert.bananapixel.my.id
+      - NTFY_BASE_URL=https://quakealert.web.id
       - NTFY_LISTEN_HTTP=:80
       - NTFY_BEHIND_PROXY=true
       - NTFY_FIREBASE_KEY_FILE=/etc/ntfy/firebase-key.json
@@ -75,7 +75,7 @@ services:
       - "3000:3000"
     restart: always
     environment:
-      - CORS_ORIGIN=https://quakealert.bananapixel.my.id
+      - CORS_ORIGIN=https://quakealert.web.id
 
 volumes:
   mosquitto_data:
