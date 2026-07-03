@@ -238,9 +238,10 @@ class TestQuakeAlertEEW(unittest.TestCase):
         conn.close()
         self.assertEqual(status, "RESOLVED")
 
-        # Verify push notification sent with status RESOLVED
-        last_headers = mock_post.call_args[1]['headers']
-        self.assertEqual(last_headers['X-Status'], "RESOLVED")
+        # Verify push notification sent with status RESOLVED (this is the first HTTP POST)
+        self.assertGreaterEqual(len(mock_post.call_args_list), 1)
+        ntfy_headers = mock_post.call_args_list[0][1]['headers']
+        self.assertEqual(ntfy_headers['X-Status'], "RESOLVED")
 
 if __name__ == '__main__':
     unittest.main()

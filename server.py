@@ -224,7 +224,7 @@ def receive_heartbeat():
     if not request.is_json:
         return jsonify({"error": "Invalid JSON"}), 400
     data = request.get_json()
-    station_id = data.get('stationId') # Note: matching the JSON key from firmware
+    station_id = data.get('id') or data.get('stationId') # Support both v7.0.0 firmware and legacy formats
 
     latency = _normalize_latency(data.get('latency'))
 
