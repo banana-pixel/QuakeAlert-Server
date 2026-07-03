@@ -77,6 +77,19 @@ services:
     environment:
       - CORS_ORIGIN=https://quakealert.web.id
 
+  nginx:
+    image: nginx:alpine
+    container_name: quake-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - ./config/nginx_local.conf:/etc/nginx/nginx.conf:ro,z
+    depends_on:
+      - ntfy
+      - report-server
+      - chat-service
+
 volumes:
   mosquitto_data:
   ntfy_cache:
