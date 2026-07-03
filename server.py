@@ -86,6 +86,20 @@ def init_db():
     if 'longitude' not in columns:
         cursor.execute("ALTER TABLE stations ADD COLUMN longitude REAL")
         print("Migration: added stations.longitude")
+    # ongoing_events: real-time active earthquake state (§3.1)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ongoing_events (
+            event_id      TEXT PRIMARY KEY,
+            status        TEXT NOT NULL,
+            epicenter_lat REAL NOT NULL,
+            epicenter_lon REAL NOT NULL,
+            max_pga       REAL NOT NULL,
+            started_at    TEXT NOT NULL,
+            updated_at    TEXT NOT NULL
+        )
+    ''')
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_ongoing_status ON ongoing_events(status)")
+
     # Add Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_laporan_id ON laporan(id DESC)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_laporan_station ON laporan(station_id, waktu_kejadian)")
@@ -124,9 +138,16 @@ def init_db():
     print("Database initialized.")
 
 def get_db():
+    """Open a WAL-mode connection with a 5s busy timeout (§3.1 of arch spec).
+    WAL mode allows concurrent reads from the Android app while the bridge
+    is writing events, preventing SQLITE_BUSY errors under load.
+    """
     if 'db' not in g:
-        g.db = sqlite3.connect(DB_FILE)
+        g.db = sqlite3.connect(DB_FILE, timeout=5.0)
         g.db.row_factory = sqlite3.Row
+        # Enable Write-Ahead Logging for concurrent read/write support
+        g.db.execute("PRAGMA journal_mode=WAL;")
+        g.db.execute("PRAGMA synchronous=NORMAL;")
     return g.db
 
 @app.teardown_appcontext
@@ -310,7 +331,71 @@ def cleanup_test_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# ---------------------------------------------------------------------------
+# Event State Endpoints — used by Android Hybrid Smart Push (§5.1 & §5.2)
+# ---------------------------------------------------------------------------
+
+def _row_to_event(row) -> dict:
+    """Serialize an ongoing_events row to the spec JSON shape."""
+    d = dict(row)
+    # Attach a Unix Epoch timestamp for packet ordering on the client side
+    try:
+        updated_dt = datetime.strptime(d["updated_at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        d["timestamp"] = int(updated_dt.timestamp())
+    except Exception:
+        d["timestamp"] = 0
+    return d
+
+
+@app.route('/events', methods=['GET'])
+def get_events():
+    """
+    GET /events?status=active
+    Returns a list of ongoing earthquake events.
+    Spec §5.2 — used by Android client to enumerate current events.
+    Optional query param:
+        status=active   → only ACTIVE events (default)
+        status=all      → all events including RESOLVED
+    """
+    try:
+        status_filter = request.args.get('status', 'active').upper()
+        conn = get_db()
+        cursor = conn.cursor()
+        if status_filter == 'ALL':
+            cursor.execute("SELECT * FROM ongoing_events ORDER BY started_at DESC LIMIT 100")
+        else:
+            cursor.execute(
+                "SELECT * FROM ongoing_events WHERE status = 'ACTIVE' ORDER BY started_at DESC"
+            )
+        rows = cursor.fetchall()
+        return jsonify([_row_to_event(r) for r in rows]), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/events/<event_id>', methods=['GET'])
+def get_event(event_id):
+    """
+    GET /events/<event_id>
+    Fetches the real-time state of a specific earthquake event.
+    Spec §5.1 — called by the Android app after triggering an alarm to
+    verify the server has not already resolved the event (anti-false-alarm).
+    """
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ongoing_events WHERE event_id = ?", (event_id,))
+        row = cursor.fetchone()
+        if row is None:
+            return jsonify({"error": "Event not found"}), 404
+        return jsonify(_row_to_event(row)), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == '__main__':
     init_db()
     # Host 0.0.0.0 is required if running in Docker
     app.run(host='0.0.0.0', port=5000)
+
