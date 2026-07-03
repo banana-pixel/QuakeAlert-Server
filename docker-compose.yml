@@ -26,7 +26,7 @@ services:
       # - NTFY_FIREBASE_KEY_FILE=/etc/ntfy/firebase-key.json
       - NTFY_AUTH_FILE=/var/lib/ntfy/user.db
       - NTFY_AUTH_DEFAULT_ACCESS=read-only
-      - NTFY_ENABLE_WEB=false
+      - NTFY_ENABLE_WEB_INTERFACE=false
     volumes:
       - ntfy_cache:/var/cache/ntfy
       - ntfy_lib:/var/lib/ntfy
@@ -76,19 +76,6 @@ services:
     restart: always
     environment:
       - CORS_ORIGIN=https://quakealert.web.id
-
-  nginx:
-    image: nginx:alpine
-    container_name: quake-nginx
-    restart: unless-stopped
-    ports:
-      - "8000:80"
-    volumes:
-      - ./config/nginx_local.conf:/etc/nginx/nginx.conf:ro,z
-    depends_on:
-      - ntfy
-      - report-server
-      - chat-service
 
 volumes:
   mosquitto_data:
